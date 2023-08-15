@@ -50,12 +50,25 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineTransducerModelConfig {
   const char *encoder;
   const char *decoder;
   const char *joiner;
+} SherpaOnnxOnlineTransducerModelConfig;
+
+// please visit
+// https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-paraformer/index.html
+// to download pre-trained streaming paraformer models
+SHERPA_ONNX_API typedef struct SherpaOnnxOnlineParaformerModelConfig {
+  const char *encoder;
+  const char *decoder;
+} SherpaOnnxOnlineParaformerModelConfig;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxModelConfig {
+  SherpaOnnxOnlineTransducerModelConfig transducer;
+  SherpaOnnxOnlineParaformerModelConfig paraformer;
   const char *tokens;
   int32_t num_threads;
   const char *provider;
   int32_t debug;  // true to print debug information of the model
   const char *model_type;
-} SherpaOnnxOnlineTransducerModelConfig;
+} SherpaOnnxOnlineModelConfig;
 
 /// It expects 16 kHz 16-bit single channel wave format.
 SHERPA_ONNX_API typedef struct SherpaOnnxFeatureConfig {
@@ -71,7 +84,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxFeatureConfig {
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOnlineRecognizerConfig {
   SherpaOnnxFeatureConfig feat_config;
-  SherpaOnnxOnlineTransducerModelConfig model_config;
+  SherpaOnnxOnlineModelConfig model_config;
 
   /// Possible values are: greedy_search, modified_beam_search
   const char *decoding_method;
@@ -101,8 +114,35 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineRecognizerConfig {
 } SherpaOnnxOnlineRecognizerConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOnlineRecognizerResult {
+  // Recognized text
   const char *text;
-  // TODO(fangjun): Add more fields
+
+  // Pointer to continuous memory which holds string based tokens
+  // which are seperated by \0
+  const char *tokens;
+
+  // a pointer array contains the address of the first item in tokens
+  const char *const *tokens_arr;
+
+  // Pointer to continuous memory which holds timestamps
+  float *timestamps;
+
+  // The number of tokens/timestamps in above pointer
+  int32_t count;
+
+  /** Return a json string.
+   *
+   * The returned string contains:
+   *   {
+   *     "text": "The recognition result",
+   *     "tokens": [x, x, x],
+   *     "timestamps": [x, x, x],
+   *     "segment": x,
+   *     "start_time": x,
+   *     "is_final": true|false
+   *   }
+   */
+  const char *json;
 } SherpaOnnxOnlineRecognizerResult;
 
 /// Note: OnlineRecognizer here means StreamingRecognizer.
@@ -260,6 +300,11 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineNemoEncDecCtcModelConfig {
   const char *model;
 } SherpaOnnxOfflineNemoEncDecCtcModelConfig;
 
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineWhisperModelConfig {
+  const char *encoder;
+  const char *decoder;
+} SherpaOnnxOfflineWhisperModelConfig;
+
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineLMConfig {
   const char *model;
   float scale;
@@ -269,6 +314,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineModelConfig {
   SherpaOnnxOfflineTransducerModelConfig transducer;
   SherpaOnnxOfflineParaformerModelConfig paraformer;
   SherpaOnnxOfflineNemoEncDecCtcModelConfig nemo_ctc;
+  SherpaOnnxOfflineWhisperModelConfig whisper;
 
   const char *tokens;
   int32_t num_threads;
