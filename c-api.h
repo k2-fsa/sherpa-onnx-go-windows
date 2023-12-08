@@ -130,10 +130,10 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineRecognizerResult {
   const char *text;
 
   // Pointer to continuous memory which holds string based tokens
-  // which are seperated by \0
+  // which are separated by \0
   const char *tokens;
 
-  // a pointer array contains the address of the first item in tokens
+  // a pointer array containing the address of the first item in tokens
   const char *const *tokens_arr;
 
   // Pointer to continuous memory which holds timestamps
@@ -532,6 +532,11 @@ SHERPA_ONNX_API void SherpaOnnxCircularBufferPop(
 SHERPA_ONNX_API int32_t
 SherpaOnnxCircularBufferSize(SherpaOnnxCircularBuffer *buffer);
 
+// Return the head of the buffer. It's always non-decreasing until you
+// invoke SherpaOnnxCircularBufferReset() which resets head to 0.
+SHERPA_ONNX_API int32_t
+SherpaOnnxCircularBufferHead(SherpaOnnxCircularBuffer *buffer);
+
 // Clear all elements in the buffer
 SHERPA_ONNX_API void SherpaOnnxCircularBufferReset(
     SherpaOnnxCircularBuffer *buffer);
@@ -602,6 +607,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsVitsModelConfig {
   const char *model;
   const char *lexicon;
   const char *tokens;
+  const char *data_dir;
 
   float noise_scale;
   float noise_scale_w;
@@ -617,6 +623,8 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsConfig {
   SherpaOnnxOfflineTtsModelConfig model;
+  const char *rule_fsts;
+  int32_t max_num_sentences;
 } SherpaOnnxOfflineTtsConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxGeneratedAudio {
@@ -624,6 +632,9 @@ SHERPA_ONNX_API typedef struct SherpaOnnxGeneratedAudio {
   int32_t n;             // number of samples
   int32_t sample_rate;
 } SherpaOnnxGeneratedAudio;
+
+typedef void (*SherpaOnnxGeneratedAudioCallback)(const float *samples,
+                                                 int32_t n);
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTts SherpaOnnxOfflineTts;
 
@@ -635,12 +646,25 @@ SHERPA_ONNX_API SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTts(
 // Free the pointer returned by CreateOfflineTts()
 SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTts(SherpaOnnxOfflineTts *tts);
 
+// Return the sample rate of the current TTS object
+SHERPA_ONNX_API int32_t
+SherpaOnnxOfflineTtsSampleRate(const SherpaOnnxOfflineTts *tts);
+
 // Generate audio from the given text and speaker id (sid).
-// The user has to use DestroyOfflineTtsGeneratedAudio() to free the returned
-// pointer to avoid memory leak.
+// The user has to use DestroyOfflineTtsGeneratedAudio() to free the
+// returned pointer to avoid memory leak.
 SHERPA_ONNX_API const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerate(
     const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid,
     float speed);
+
+// callback is called whenever SherpaOnnxOfflineTtsConfig.max_num_sentences
+// sentences have been processed. The pointer passed to the callback
+// is freed once the callback is returned. So the caller should not keep
+// a reference to it.
+SHERPA_ONNX_API const SherpaOnnxGeneratedAudio *
+SherpaOnnxOfflineTtsGenerateWithCallback(
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    SherpaOnnxGeneratedAudioCallback callback);
 
 SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
     const SherpaOnnxGeneratedAudio *p);
