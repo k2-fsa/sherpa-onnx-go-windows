@@ -614,6 +614,9 @@ func (tts *OfflineTts) Generate(text string, sid int, speed float32) *GeneratedA
 	ans.SampleRate = int(audio.sample_rate)
 	n := int(audio.n)
 	ans.Samples = make([]float32, n)
+
+	// see https://stackoverflow.com/questions/48756732/what-does-1-30c-yourtype-do-exactly-in-cgo
+	// :n:n means 0:n:n, means low:high:capacity
 	samples := (*[1 << 28]C.float)(unsafe.Pointer(audio.samples))[:n:n]
 	// copy(ans.Samples, samples)
 	for i := 0; i < n; i++ {
@@ -623,11 +626,430 @@ func (tts *OfflineTts) Generate(text string, sid int, speed float32) *GeneratedA
 	return ans
 }
 
-func (audio *GeneratedAudio) Save(filename string) int {
+func (audio *GeneratedAudio) Save(filename string) bool {
 	s := C.CString(filename)
 	defer C.free(unsafe.Pointer(s))
 
 	ok := int(C.SherpaOnnxWriteWave((*C.float)(&audio.Samples[0]), C.int(len(audio.Samples)), C.int(audio.SampleRate), s))
 
-	return ok
+	return ok == 1
+}
+
+// ============================================================
+// For VAD
+// ============================================================
+type SileroVadModelConfig struct {
+	Model              string
+	Threshold          float32
+	MinSilenceDuration float32
+	MinSpeechDuration  float32
+	WindowSize         int
+}
+
+type VadModelConfig struct {
+	SileroVad  SileroVadModelConfig
+	SampleRate int
+	NumThreads int
+	Provider   string
+	Debug      int
+}
+
+type CircularBuffer struct {
+	impl *C.struct_SherpaOnnxCircularBuffer
+}
+
+func DeleteCircularBuffer(buffer *CircularBuffer) {
+	C.SherpaOnnxDestroyCircularBuffer(buffer.impl)
+	buffer.impl = nil
+}
+
+func NewCircularBuffer(capacity int) *CircularBuffer {
+	circularBuffer := &CircularBuffer{}
+	circularBuffer.impl = C.SherpaOnnxCreateCircularBuffer(C.int(capacity))
+	return circularBuffer
+}
+
+func (buffer *CircularBuffer) Push(samples []float32) {
+	C.SherpaOnnxCircularBufferPush(buffer.impl, (*C.float)(&samples[0]), C.int(len(samples)))
+}
+
+func (buffer *CircularBuffer) Get(start int, n int) []float32 {
+	samples := C.SherpaOnnxCircularBufferGet(buffer.impl, C.int(start), C.int(n))
+	defer C.SherpaOnnxCircularBufferFree(samples)
+
+	result := make([]float32, n)
+
+	p := (*[1 << 28]C.float)(unsafe.Pointer(samples))[:n:n]
+	for i := 0; i < n; i++ {
+		result[i] = float32(p[i])
+	}
+
+	return result
+}
+
+func (buffer *CircularBuffer) Pop(n int) {
+	C.SherpaOnnxCircularBufferPop(buffer.impl, C.int(n))
+}
+
+func (buffer *CircularBuffer) Size() int {
+	return int(C.SherpaOnnxCircularBufferSize(buffer.impl))
+}
+
+func (buffer *CircularBuffer) Head() int {
+	return int(C.SherpaOnnxCircularBufferHead(buffer.impl))
+}
+
+func (buffer *CircularBuffer) Reset() {
+	C.SherpaOnnxCircularBufferReset(buffer.impl)
+}
+
+type SpeechSegment struct {
+	Start   int
+	Samples []float32
+}
+
+type VoiceActivityDetector struct {
+	impl *C.struct_SherpaOnnxVoiceActivityDetector
+}
+
+func NewVoiceActivityDetector(config *VadModelConfig, bufferSizeInSeconds float32) *VoiceActivityDetector {
+	c := C.struct_SherpaOnnxVadModelConfig{}
+
+	c.silero_vad.model = C.CString(config.SileroVad.Model)
+	defer C.free(unsafe.Pointer(c.silero_vad.model))
+
+	c.silero_vad.threshold = C.float(config.SileroVad.Threshold)
+	c.silero_vad.min_silence_duration = C.float(config.SileroVad.MinSilenceDuration)
+	c.silero_vad.min_speech_duration = C.float(config.SileroVad.MinSpeechDuration)
+	c.silero_vad.window_size = C.int(config.SileroVad.WindowSize)
+
+	c.sample_rate = C.int(config.SampleRate)
+	c.num_threads = C.int(config.NumThreads)
+	c.provider = C.CString(config.Provider)
+	defer C.free(unsafe.Pointer(c.provider))
+
+	c.debug = C.int(config.Debug)
+
+	vad := &VoiceActivityDetector{}
+	vad.impl = C.SherpaOnnxCreateVoiceActivityDetector(&c, C.float(bufferSizeInSeconds))
+
+	return vad
+}
+
+func DeleteVoiceActivityDetector(vad *VoiceActivityDetector) {
+	C.SherpaOnnxDestroyVoiceActivityDetector(vad.impl)
+	vad.impl = nil
+}
+
+func (vad *VoiceActivityDetector) AcceptWaveform(samples []float32) {
+	C.SherpaOnnxVoiceActivityDetectorAcceptWaveform(vad.impl, (*C.float)(&samples[0]), C.int(len(samples)))
+}
+
+func (vad *VoiceActivityDetector) IsEmpty() bool {
+	return int(C.SherpaOnnxVoiceActivityDetectorEmpty(vad.impl)) == 1
+}
+
+func (vad *VoiceActivityDetector) IsSpeech() bool {
+	return int(C.SherpaOnnxVoiceActivityDetectorDetected(vad.impl)) == 1
+}
+
+func (vad *VoiceActivityDetector) Pop() {
+	C.SherpaOnnxVoiceActivityDetectorPop(vad.impl)
+}
+
+func (vad *VoiceActivityDetector) Clear() {
+	C.SherpaOnnxVoiceActivityDetectorClear(vad.impl)
+}
+
+func (vad *VoiceActivityDetector) Front() *SpeechSegment {
+	f := C.SherpaOnnxVoiceActivityDetectorFront(vad.impl)
+	defer C.SherpaOnnxDestroySpeechSegment(f)
+
+	ans := &SpeechSegment{}
+	ans.Start = int(f.start)
+
+	n := int(f.n)
+	ans.Samples = make([]float32, n)
+
+	samples := (*[1 << 28]C.float)(unsafe.Pointer(f.samples))[:n:n]
+
+	for i := 0; i < n; i++ {
+		ans.Samples[i] = float32(samples[i])
+	}
+
+	return ans
+}
+
+func (vad *VoiceActivityDetector) Reset() {
+	C.SherpaOnnxVoiceActivityDetectorReset(vad.impl)
+}
+
+// Spoken language identification
+
+type SpokenLanguageIdentificationWhisperConfig struct {
+	Encoder      string
+	Decoder      string
+	TailPaddings int
+}
+
+type SpokenLanguageIdentificationConfig struct {
+	Whisper    SpokenLanguageIdentificationWhisperConfig
+	NumThreads int
+	Debug      int
+	Provider   string
+}
+
+type SpokenLanguageIdentification struct {
+	impl *C.struct_SherpaOnnxSpokenLanguageIdentification
+}
+
+type SpokenLanguageIdentificationResult struct {
+	Lang string
+}
+
+func NewSpokenLanguageIdentification(config *SpokenLanguageIdentificationConfig) *SpokenLanguageIdentification {
+	c := C.struct_SherpaOnnxSpokenLanguageIdentificationConfig{}
+
+	c.whisper.encoder = C.CString(config.Whisper.Encoder)
+	defer C.free(unsafe.Pointer(c.whisper.encoder))
+
+	c.whisper.decoder = C.CString(config.Whisper.Decoder)
+	defer C.free(unsafe.Pointer(c.whisper.decoder))
+
+	c.whisper.tail_paddings = C.int(config.Whisper.TailPaddings)
+
+	c.num_threads = C.int(config.NumThreads)
+	c.debug = C.int(config.Debug)
+
+	c.provider = C.CString(config.Provider)
+	defer C.free(unsafe.Pointer(c.provider))
+
+	slid := &SpokenLanguageIdentification{}
+	slid.impl = C.SherpaOnnxCreateSpokenLanguageIdentification(&c)
+
+	return slid
+}
+
+func DeleteSpokenLanguageIdentification(slid *SpokenLanguageIdentification) {
+	C.SherpaOnnxDestroySpokenLanguageIdentification(slid.impl)
+	slid.impl = nil
+}
+
+// The user has to invoke DeleteOfflineStream() to free the returned value
+// to avoid memory leak
+func (slid *SpokenLanguageIdentification) CreateStream() *OfflineStream {
+	stream := &OfflineStream{}
+	stream.impl = C.SherpaOnnxSpokenLanguageIdentificationCreateOfflineStream(slid.impl)
+	return stream
+}
+
+func (slid *SpokenLanguageIdentification) Compute(stream *OfflineStream) *SpokenLanguageIdentificationResult {
+	r := C.SherpaOnnxSpokenLanguageIdentificationCompute(slid.impl, stream.impl)
+	// defer C.SherpaOnnxDestroySpokenLanguageIdentificationResult(r)
+
+	ans := &SpokenLanguageIdentificationResult{}
+	ans.Lang = C.GoString(r.lang)
+
+	return ans
+}
+
+// ============================================================
+// For speaker embedding extraction
+// ============================================================
+
+type SpeakerEmbeddingExtractorConfig struct {
+	Model      string
+	NumThreads int
+	Debug      int
+	Provider   string
+}
+
+type SpeakerEmbeddingExtractor struct {
+	impl *C.struct_SherpaOnnxSpeakerEmbeddingExtractor
+}
+
+// The user has to invoke [DeleteSpeakerEmbeddingExtractor]() to free the returned value
+// to avoid memory leak
+func NewSpeakerEmbeddingExtractor(config *SpeakerEmbeddingExtractorConfig) *SpeakerEmbeddingExtractor {
+	c := C.struct_SherpaOnnxSpeakerEmbeddingExtractorConfig{}
+
+	c.model = C.CString(config.Model)
+	defer C.free(unsafe.Pointer(c.model))
+
+	c.num_threads = C.int(config.NumThreads)
+	c.debug = C.int(config.Debug)
+
+	c.provider = C.CString(config.Provider)
+	defer C.free(unsafe.Pointer(c.provider))
+
+	ex := &SpeakerEmbeddingExtractor{}
+	ex.impl = C.SherpaOnnxCreateSpeakerEmbeddingExtractor(&c)
+
+	return ex
+}
+
+func DeleteSpeakerEmbeddingExtractor(ex *SpeakerEmbeddingExtractor) {
+	C.SherpaOnnxDestroySpeakerEmbeddingExtractor(ex.impl)
+	ex.impl = nil
+}
+
+func (ex *SpeakerEmbeddingExtractor) Dim() int {
+	return int(C.SherpaOnnxSpeakerEmbeddingExtractorDim(ex.impl))
+}
+
+// The user is responsible to invoke [DeleteOnlineStream]() to free
+// the returned stream to avoid memory leak
+func (ex *SpeakerEmbeddingExtractor) CreateStream() *OnlineStream {
+	stream := &OnlineStream{}
+	stream.impl = C.SherpaOnnxSpeakerEmbeddingExtractorCreateStream(ex.impl)
+	return stream
+}
+
+func (ex *SpeakerEmbeddingExtractor) IsReady(stream *OnlineStream) bool {
+	return int(C.SherpaOnnxSpeakerEmbeddingExtractorIsReady(ex.impl, stream.impl)) == 1
+}
+
+func (ex *SpeakerEmbeddingExtractor) Compute(stream *OnlineStream) []float32 {
+	embedding := C.SherpaOnnxSpeakerEmbeddingExtractorComputeEmbedding(ex.impl, stream.impl)
+	defer C.SherpaOnnxSpeakerEmbeddingExtractorDestroyEmbedding(embedding)
+
+	n := ex.Dim()
+	ans := make([]float32, n)
+
+	// see https://stackoverflow.com/questions/48756732/what-does-1-30c-yourtype-do-exactly-in-cgo
+	// :n:n means 0:n:n, means low:high:capacity
+	c := (*[1 << 28]C.float)(unsafe.Pointer(embedding))[:n:n]
+
+	for i := 0; i < n; i++ {
+		ans[i] = float32(c[i])
+	}
+
+	return ans
+}
+
+type SpeakerEmbeddingManager struct {
+	impl *C.struct_SherpaOnnxSpeakerEmbeddingManager
+}
+
+// The user has to invoke [DeleteSpeakerEmbeddingManager]() to free the returned
+// value to avoid memory leak
+func NewSpeakerEmbeddingManager(dim int) *SpeakerEmbeddingManager {
+	m := &SpeakerEmbeddingManager{}
+	m.impl = C.SherpaOnnxCreateSpeakerEmbeddingManager(C.int(dim))
+	return m
+}
+
+func DeleteSpeakerEmbeddingManager(m *SpeakerEmbeddingManager) {
+	C.SherpaOnnxDestroySpeakerEmbeddingManager(m.impl)
+	m.impl = nil
+}
+
+func (m *SpeakerEmbeddingManager) Register(name string, embedding []float32) bool {
+	s := C.CString(name)
+	defer C.free(unsafe.Pointer(s))
+
+	return C.int(C.SherpaOnnxSpeakerEmbeddingManagerAdd(m.impl, s, (*C.float)(&embedding[0]))) == 1
+}
+
+func (m *SpeakerEmbeddingManager) RegisterV(name string, embeddings [][]float32) bool {
+	s := C.CString(name)
+	defer C.free(unsafe.Pointer(s))
+
+	if len(embeddings) == 0 {
+		return false
+	}
+
+	dim := len(embeddings[0])
+	v := make([]float32, 0, dim*len(embeddings))
+	for _, embedding := range embeddings {
+		v = append(v, embedding...)
+	}
+
+	return C.int(C.SherpaOnnxSpeakerEmbeddingManagerAddListFlattened(m.impl, s, (*C.float)(&v[0]), C.int(len(embeddings)))) == 1
+}
+
+func (m *SpeakerEmbeddingManager) Remove(name string) bool {
+	s := C.CString(name)
+	defer C.free(unsafe.Pointer(s))
+
+	return C.int(C.SherpaOnnxSpeakerEmbeddingManagerRemove(m.impl, s)) == 1
+}
+
+func (m *SpeakerEmbeddingManager) Search(embedding []float32, threshold float32) string {
+	var s string
+
+	name := C.SherpaOnnxSpeakerEmbeddingManagerSearch(m.impl, (*C.float)(&embedding[0]), C.float(threshold))
+	defer C.SherpaOnnxSpeakerEmbeddingManagerFreeSearch(name)
+
+	if name != nil {
+		s = C.GoString(name)
+	}
+
+	return s
+}
+
+func (m *SpeakerEmbeddingManager) Verify(name string, embedding []float32, threshold float32) bool {
+	s := C.CString(name)
+	defer C.free(unsafe.Pointer(s))
+
+	return C.int(C.SherpaOnnxSpeakerEmbeddingManagerVerify(m.impl, s, (*C.float)(&embedding[0]), C.float(threshold))) == 1
+}
+
+func (m *SpeakerEmbeddingManager) Contains(name string) bool {
+	s := C.CString(name)
+	defer C.free(unsafe.Pointer(s))
+
+	return C.int(C.SherpaOnnxSpeakerEmbeddingManagerContains(m.impl, s)) == 1
+}
+
+func (m *SpeakerEmbeddingManager) NumSpeakers() int {
+	return int(C.SherpaOnnxSpeakerEmbeddingManagerNumSpeakers(m.impl))
+}
+
+func (m *SpeakerEmbeddingManager) AllSpeakers() []string {
+	all_speakers := C.SherpaOnnxSpeakerEmbeddingManagerGetAllSpeakers(m.impl)
+	defer C.SherpaOnnxSpeakerEmbeddingManagerFreeAllSpeakers(all_speakers)
+
+	n := m.NumSpeakers()
+	if n == 0 {
+		return nil
+	}
+
+	// https://stackoverflow.com/questions/62012070/convert-array-of-strings-from-cgo-in-go
+	p := (*[1 << 28]*C.char)(unsafe.Pointer(all_speakers))[:n:n]
+
+	ans := make([]string, n)
+
+	for i := 0; i < n; i++ {
+		ans[i] = C.GoString(p[i])
+	}
+
+	return ans
+}
+
+// Wave
+
+// single channel wave
+type Wave = GeneratedAudio
+
+func ReadWave(filename string) *Wave {
+	s := C.CString(filename)
+	defer C.free(unsafe.Pointer(s))
+
+	w := C.SherpaOnnxReadWave(s)
+	defer C.SherpaOnnxFreeWave(w)
+
+	n := int(w.num_samples)
+
+	ans := &Wave{}
+	ans.SampleRate = int(w.sample_rate)
+	samples := (*[1 << 28]C.float)(unsafe.Pointer(w.samples))[:n:n]
+
+	ans.Samples = make([]float32, n)
+
+	for i := 0; i < n; i++ {
+		ans.Samples[i] = float32(samples[i])
+	}
+
+	return ans
 }
