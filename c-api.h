@@ -772,6 +772,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsVitsModelConfig {
   float noise_scale;
   float noise_scale_w;
   float length_scale;  // < 1, faster in speed; > 1, slower in speed
+  const char *dict_dir;
 } SherpaOnnxOfflineTtsVitsModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
@@ -1100,6 +1101,7 @@ SHERPA_ONNX_API typedef struct
 
 SHERPA_ONNX_API typedef struct SherpaOnnxAudioTaggingModelConfig {
   SherpaOnnxOfflineZipformerAudioTaggingModelConfig zipformer;
+  const char *ced;
   int32_t num_threads;
   int32_t debug;  // true to print debug information of the model
   const char *provider;
