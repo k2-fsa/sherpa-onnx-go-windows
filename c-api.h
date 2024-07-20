@@ -379,6 +379,12 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineLMConfig {
   float scale;
 } SherpaOnnxOfflineLMConfig;
 
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineSenseVoiceModelConfig {
+  const char *model;
+  const char *language;
+  int32_t use_itn;
+} SherpaOnnxOfflineSenseVoiceModelConfig;
+
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineModelConfig {
   SherpaOnnxOfflineTransducerModelConfig transducer;
   SherpaOnnxOfflineParaformerModelConfig paraformer;
@@ -398,6 +404,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineModelConfig {
   const char *modeling_unit;
   const char *bpe_vocab;
   const char *telespeech_ctc;
+  SherpaOnnxOfflineSenseVoiceModelConfig sense_voice;
 } SherpaOnnxOfflineModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineRecognizerConfig {
@@ -496,7 +503,7 @@ SHERPA_ONNX_API void DecodeMultipleOfflineStreams(
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineRecognizerResult {
   const char *text;
 
-    // Pointer to continuous memory which holds timestamps
+  // Pointer to continuous memory which holds timestamps
   //
   // It is NULL if the model does not support timestamps
   float *timestamps;
@@ -525,9 +532,8 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineRecognizerResult {
    */
   const char *json;
 
-  //return recognized language
+  // return recognized language
   const char *lang;
-
 } SherpaOnnxOfflineRecognizerResult;
 
 /// Get the result of the offline stream.
