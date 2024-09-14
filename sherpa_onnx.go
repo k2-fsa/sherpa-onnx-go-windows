@@ -89,6 +89,8 @@ type OnlineModelConfig struct {
 	ModelType     string // Optional. You can specify it for faster model initialization
 	ModelingUnit  string // Optional. cjkchar, bpe, cjkchar+bpe
 	BpeVocab      string // Optional.
+	TokensBuf     string // Optional.
+	TokensBufSize int    // Optional.
 }
 
 // Configuration for the feature extractor
@@ -133,6 +135,8 @@ type OnlineRecognizerConfig struct {
 	CtcFstDecoderConfig     OnlineCtcFstDecoderConfig
 	RuleFsts                string
 	RuleFars                string
+	HotwordsBuf             string
+	HotwordsBufSize         int
 }
 
 // It contains the recognition result for a online stream.
@@ -184,6 +188,11 @@ func NewOnlineRecognizer(config *OnlineRecognizerConfig) *OnlineRecognizer {
 	c.model_config.tokens = C.CString(config.ModelConfig.Tokens)
 	defer C.free(unsafe.Pointer(c.model_config.tokens))
 
+	c.model_config.tokens_buf = C.CString(config.ModelConfig.TokensBuf)
+	defer C.free(unsafe.Pointer(c.model_config.tokens_buf))
+
+	c.model_config.tokens_buf_size = C.int(config.ModelConfig.TokensBufSize)
+
 	c.model_config.num_threads = C.int(config.ModelConfig.NumThreads)
 
 	c.model_config.provider = C.CString(config.ModelConfig.Provider)
@@ -211,6 +220,11 @@ func NewOnlineRecognizer(config *OnlineRecognizerConfig) *OnlineRecognizer {
 
 	c.hotwords_file = C.CString(config.HotwordsFile)
 	defer C.free(unsafe.Pointer(c.hotwords_file))
+
+	c.hotwords_buf = C.CString(config.HotwordsBuf)
+	defer C.free(unsafe.Pointer(c.hotwords_buf))
+
+	c.hotwords_buf_size = C.int(config.HotwordsBufSize)
 
 	c.hotwords_score = C.float(config.HotwordsScore)
 	c.blank_penalty = C.float(config.BlankPenalty)
@@ -757,6 +771,7 @@ type SileroVadModelConfig struct {
 	MinSilenceDuration float32
 	MinSpeechDuration  float32
 	WindowSize         int
+	MaxSpeechDuration  float32
 }
 
 type VadModelConfig struct {
@@ -835,6 +850,7 @@ func NewVoiceActivityDetector(config *VadModelConfig, bufferSizeInSeconds float3
 	c.silero_vad.min_silence_duration = C.float(config.SileroVad.MinSilenceDuration)
 	c.silero_vad.min_speech_duration = C.float(config.SileroVad.MinSpeechDuration)
 	c.silero_vad.window_size = C.int(config.SileroVad.WindowSize)
+	c.silero_vad.max_speech_duration = C.float(config.SileroVad.MaxSpeechDuration)
 
 	c.sample_rate = C.int(config.SampleRate)
 	c.num_threads = C.int(config.NumThreads)

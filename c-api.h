@@ -88,6 +88,11 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineModelConfig {
   //  - cjkchar+bpe
   const char *modeling_unit;
   const char *bpe_vocab;
+  /// if non-null, loading the tokens from the buffered string directly in
+  /// prioriy
+  const char *tokens_buf;
+  /// byte size excluding the trailing '\0'
+  int32_t tokens_buf_size;
 } SherpaOnnxOnlineModelConfig;
 
 /// It expects 16 kHz 16-bit single channel wave format.
@@ -147,6 +152,11 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineRecognizerConfig {
   const char *rule_fsts;
   const char *rule_fars;
   float blank_penalty;
+
+  /// if non-nullptr, loading the hotwords from the buffered string directly in
+  const char *hotwords_buf;
+  /// byte size excluding the tailing '\0'
+  int32_t hotwords_buf_size;
 } SherpaOnnxOnlineRecognizerConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOnlineRecognizerResult {
@@ -736,6 +746,11 @@ SHERPA_ONNX_API typedef struct SherpaOnnxSileroVadModelConfig {
   float min_speech_duration;
 
   int window_size;
+
+  // If a speech segment is longer than this value, then we increase
+  // the threshold to 0.9. After finishing detecting the segment,
+  // the threshold value is reset to its original value.
+  float max_speech_duration;
 } SherpaOnnxSileroVadModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxVadModelConfig {
