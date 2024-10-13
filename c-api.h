@@ -88,8 +88,8 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineModelConfig {
   //  - cjkchar+bpe
   const char *modeling_unit;
   const char *bpe_vocab;
-  /// if non-null, loading the tokens from the buffered string directly in
-  /// prioriy
+  /// if non-null, loading the tokens from the buffer instead of from the
+  /// "tokens" file
   const char *tokens_buf;
   /// byte size excluding the trailing '\0'
   int32_t tokens_buf_size;
@@ -637,6 +637,11 @@ SHERPA_ONNX_API typedef struct SherpaOnnxKeywordSpotterConfig {
   float keywords_score;
   float keywords_threshold;
   const char *keywords_file;
+  /// if non-null, loading the keywords from the buffer instead of from the
+  /// keywords_file
+  const char *keywords_buf;
+  /// byte size excluding the trailing '\0'
+  int32_t keywords_buf_size;
 } SherpaOnnxKeywordSpotterConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxKeywordSpotter
@@ -922,7 +927,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTts SherpaOnnxOfflineTts;
 SHERPA_ONNX_API SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTts(
     const SherpaOnnxOfflineTtsConfig *config);
 
-// Free the pointer returned by CreateOfflineTts()
+// Free the pointer returned by SherpaOnnxCreateOfflineTts()
 SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTts(SherpaOnnxOfflineTts *tts);
 
 // Return the sample rate of the current TTS object
@@ -948,6 +953,11 @@ SHERPA_ONNX_API const SherpaOnnxGeneratedAudio *
 SherpaOnnxOfflineTtsGenerateWithCallback(
     const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
     SherpaOnnxGeneratedAudioCallback callback);
+
+const SherpaOnnxGeneratedAudio *
+SherpaOnnxOfflineTtsGenerateWithProgressCallback(
+    const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
+    SherpaOnnxGeneratedAudioProgressCallback callback);
 
 // Same as SherpaOnnxGeneratedAudioCallback but you can pass an additional
 // `void* arg` to the callback.
@@ -1378,6 +1388,129 @@ SHERPA_ONNX_API int32_t SherpaOnnxLinearResamplerResampleGetOutputSampleRate(
 
 // Return 1 if the file exists; return 0 if the file does not exist.
 SHERPA_ONNX_API int32_t SherpaOnnxFileExists(const char *filename);
+
+// =========================================================================
+// For offline speaker diarization (i.e., non-streaming speaker diarization)
+// =========================================================================
+SHERPA_ONNX_API typedef struct
+    SherpaOnnxOfflineSpeakerSegmentationPyannoteModelConfig {
+  const char *model;
+} SherpaOnnxOfflineSpeakerSegmentationPyannoteModelConfig;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineSpeakerSegmentationModelConfig {
+  SherpaOnnxOfflineSpeakerSegmentationPyannoteModelConfig pyannote;
+  int32_t num_threads;   // 1
+  int32_t debug;         // false
+  const char *provider;  // "cpu"
+} SherpaOnnxOfflineSpeakerSegmentationModelConfig;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxFastClusteringConfig {
+  // If greater than 0, then threshold is ignored.
+  //
+  // We strongly recommend that you set it if you know the number of clusters
+  // in advance
+  int32_t num_clusters;
+
+  // distance threshold.
+  //
+  // The smaller, the more clusters it will generate.
+  // The larger, the fewer clusters it will generate.
+  float threshold;
+} SherpaOnnxFastClusteringConfig;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineSpeakerDiarizationConfig {
+  SherpaOnnxOfflineSpeakerSegmentationModelConfig segmentation;
+  SherpaOnnxSpeakerEmbeddingExtractorConfig embedding;
+  SherpaOnnxFastClusteringConfig clustering;
+
+  // if a segment is less than this value, then it is discarded
+  float min_duration_on;  // in seconds
+
+  // if the gap between to segments of the same speaker is less than this value,
+  // then these two segments are merged into a single segment.
+  // We do this recursively.
+  float min_duration_off;  // in seconds
+} SherpaOnnxOfflineSpeakerDiarizationConfig;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineSpeakerDiarization
+    SherpaOnnxOfflineSpeakerDiarization;
+
+// The users has to invoke SherpaOnnxDestroyOfflineSpeakerDiarization()
+// to free the returned pointer to avoid memory leak
+SHERPA_ONNX_API const SherpaOnnxOfflineSpeakerDiarization *
+SherpaOnnxCreateOfflineSpeakerDiarization(
+    const SherpaOnnxOfflineSpeakerDiarizationConfig *config);
+
+// Free the pointer returned by SherpaOnnxCreateOfflineSpeakerDiarization()
+SHERPA_ONNX_API void SherpaOnnxDestroyOfflineSpeakerDiarization(
+    const SherpaOnnxOfflineSpeakerDiarization *sd);
+
+// Expected sample rate of the input audio samples
+SHERPA_ONNX_API int32_t SherpaOnnxOfflineSpeakerDiarizationGetSampleRate(
+    const SherpaOnnxOfflineSpeakerDiarization *sd);
+
+// Only config->clustering is used. All other fields are ignored
+SHERPA_ONNX_API void SherpaOnnxOfflineSpeakerDiarizationSetConfig(
+    const SherpaOnnxOfflineSpeakerDiarization *sd,
+    const SherpaOnnxOfflineSpeakerDiarizationConfig *config);
+
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineSpeakerDiarizationResult
+    SherpaOnnxOfflineSpeakerDiarizationResult;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineSpeakerDiarizationSegment {
+  float start;
+  float end;
+  int32_t speaker;
+} SherpaOnnxOfflineSpeakerDiarizationSegment;
+
+SHERPA_ONNX_API int32_t SherpaOnnxOfflineSpeakerDiarizationResultGetNumSpeakers(
+    const SherpaOnnxOfflineSpeakerDiarizationResult *r);
+
+SHERPA_ONNX_API int32_t SherpaOnnxOfflineSpeakerDiarizationResultGetNumSegments(
+    const SherpaOnnxOfflineSpeakerDiarizationResult *r);
+
+// The user has to invoke SherpaOnnxOfflineSpeakerDiarizationDestroySegment()
+// to free the returned pointer to avoid memory leak.
+//
+// The returned pointer is the start address of an array.
+// Number of entries in the array equals to the value
+// returned by SherpaOnnxOfflineSpeakerDiarizationResultGetNumSegments()
+SHERPA_ONNX_API const SherpaOnnxOfflineSpeakerDiarizationSegment *
+SherpaOnnxOfflineSpeakerDiarizationResultSortByStartTime(
+    const SherpaOnnxOfflineSpeakerDiarizationResult *r);
+
+SHERPA_ONNX_API void SherpaOnnxOfflineSpeakerDiarizationDestroySegment(
+    const SherpaOnnxOfflineSpeakerDiarizationSegment *s);
+
+typedef int32_t (*SherpaOnnxOfflineSpeakerDiarizationProgressCallback)(
+    int32_t num_processed_chunk, int32_t num_total_chunks, void *arg);
+
+typedef int32_t (*SherpaOnnxOfflineSpeakerDiarizationProgressCallbackNoArg)(
+    int32_t num_processed_chunk, int32_t num_total_chunks);
+
+// The user has to invoke SherpaOnnxOfflineSpeakerDiarizationDestroyResult()
+// to free the returned pointer to avoid memory leak.
+SHERPA_ONNX_API const SherpaOnnxOfflineSpeakerDiarizationResult *
+SherpaOnnxOfflineSpeakerDiarizationProcess(
+    const SherpaOnnxOfflineSpeakerDiarization *sd, const float *samples,
+    int32_t n);
+
+// The user has to invoke SherpaOnnxOfflineSpeakerDiarizationDestroyResult()
+// to free the returned pointer to avoid memory leak.
+SHERPA_ONNX_API const SherpaOnnxOfflineSpeakerDiarizationResult *
+SherpaOnnxOfflineSpeakerDiarizationProcessWithCallback(
+    const SherpaOnnxOfflineSpeakerDiarization *sd, const float *samples,
+    int32_t n, SherpaOnnxOfflineSpeakerDiarizationProgressCallback callback,
+    void *arg);
+
+SHERPA_ONNX_API const SherpaOnnxOfflineSpeakerDiarizationResult *
+SherpaOnnxOfflineSpeakerDiarizationProcessWithCallbackNoArg(
+    const SherpaOnnxOfflineSpeakerDiarization *sd, const float *samples,
+    int32_t n,
+    SherpaOnnxOfflineSpeakerDiarizationProgressCallbackNoArg callback);
+
+SHERPA_ONNX_API void SherpaOnnxOfflineSpeakerDiarizationDestroyResult(
+    const SherpaOnnxOfflineSpeakerDiarizationResult *r);
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
