@@ -1283,7 +1283,7 @@ func (sd *OfflineSpeakerDiarization) SetConfig(config *OfflineSpeakerDiarization
 	c.clustering.num_clusters = C.int(config.Clustering.NumClusters)
 	c.clustering.threshold = C.float(config.Clustering.Threshold)
 
-	SherpaOnnxOfflineSpeakerDiarizationSetConfig(sd.impl, &c)
+	C.SherpaOnnxOfflineSpeakerDiarizationSetConfig(sd.impl, &c)
 }
 
 type OfflineSpeakerDiarizationSegment struct {
