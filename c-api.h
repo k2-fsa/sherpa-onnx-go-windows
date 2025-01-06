@@ -894,15 +894,28 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsVitsModelConfig {
 
   float noise_scale;
   float noise_scale_w;
-  float length_scale;  // < 1, faster in speed; > 1, slower in speed
+  float length_scale;  // < 1, faster in speech speed; > 1, slower in speed
   const char *dict_dir;
 } SherpaOnnxOfflineTtsVitsModelConfig;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsMatchaModelConfig {
+  const char *acoustic_model;
+  const char *vocoder;
+  const char *lexicon;
+  const char *tokens;
+  const char *data_dir;
+
+  float noise_scale;
+  float length_scale;  // < 1, faster in speech speed; > 1, slower in speed
+  const char *dict_dir;
+} SherpaOnnxOfflineTtsMatchaModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
   SherpaOnnxOfflineTtsVitsModelConfig vits;
   int32_t num_threads;
   int32_t debug;
   const char *provider;
+  SherpaOnnxOfflineTtsMatchaModelConfig matcha;
 } SherpaOnnxOfflineTtsModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsConfig {
@@ -937,11 +950,12 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTts SherpaOnnxOfflineTts;
 
 // Create an instance of offline TTS. The user has to use DestroyOfflineTts()
 // to free the returned pointer to avoid memory leak.
-SHERPA_ONNX_API SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTts(
+SHERPA_ONNX_API const SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTts(
     const SherpaOnnxOfflineTtsConfig *config);
 
 // Free the pointer returned by SherpaOnnxCreateOfflineTts()
-SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTts(SherpaOnnxOfflineTts *tts);
+SHERPA_ONNX_API void SherpaOnnxDestroyOfflineTts(
+    const SherpaOnnxOfflineTts *tts);
 
 // Return the sample rate of the current TTS object
 SHERPA_ONNX_API int32_t
@@ -971,7 +985,6 @@ SHERPA_ONNX_API
 const SherpaOnnxGeneratedAudio *
 SherpaOnnxOfflineTtsGenerateWithProgressCallback(
     const SherpaOnnxOfflineTts *tts, const char *text, int32_t sid, float speed,
-
     SherpaOnnxGeneratedAudioProgressCallback callback);
 
 SHERPA_ONNX_API
@@ -1381,12 +1394,14 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlinePunctuationConfig {
   SherpaOnnxOnlinePunctuationModelConfig model;
 } SherpaOnnxOnlinePunctuationConfig;
 
-SHERPA_ONNX_API typedef struct SherpaOnnxOnlinePunctuation SherpaOnnxOnlinePunctuation;
+SHERPA_ONNX_API typedef struct SherpaOnnxOnlinePunctuation
+    SherpaOnnxOnlinePunctuation;
 
 // Create an online punctuation processor. The user has to invoke
 // SherpaOnnxDestroyOnlinePunctuation() to free the returned pointer
 // to avoid memory leak
-SHERPA_ONNX_API const SherpaOnnxOnlinePunctuation *SherpaOnnxCreateOnlinePunctuation(
+SHERPA_ONNX_API const SherpaOnnxOnlinePunctuation *
+SherpaOnnxCreateOnlinePunctuation(
     const SherpaOnnxOnlinePunctuationConfig *config);
 
 // Free a pointer returned by SherpaOnnxCreateOnlinePunctuation()
@@ -1603,7 +1618,7 @@ SherpaOnnxCreateVoiceActivityDetectorOHOS(
     const SherpaOnnxVadModelConfig *config, float buffer_size_in_seconds,
     NativeResourceManager *mgr);
 
-SHERPA_ONNX_API SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTtsOHOS(
+SHERPA_ONNX_API const SherpaOnnxOfflineTts *SherpaOnnxCreateOfflineTtsOHOS(
     const SherpaOnnxOfflineTtsConfig *config, NativeResourceManager *mgr);
 
 SHERPA_ONNX_API const SherpaOnnxSpeakerEmbeddingExtractor *
