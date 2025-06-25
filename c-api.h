@@ -47,6 +47,30 @@ extern "C" {
 #define SHERPA_ONNX_API SHERPA_ONNX_IMPORT
 #endif
 
+// Please don't free the returned pointer.
+// Please don't modify the memory pointed by the returned pointer.
+//
+// The memory pointed by the returned pointer is statically allocated.
+//
+// Example return value: "1.12.1"
+SHERPA_ONNX_API const char *SherpaOnnxGetVersionStr();
+
+// Please don't free the returned pointer.
+// Please don't modify the memory pointed by the returned pointer.
+//
+// The memory pointed by the returned pointer is statically allocated.
+//
+// Example return value: "6982b86c"
+SHERPA_ONNX_API const char *SherpaOnnxGetGitSha1();
+
+// Please don't free the returned pointer.
+// Please don't modify the memory pointed by the returned pointer.
+//
+// The memory pointed by the returned pointer is statically allocated.
+//
+// Example return value: "Fri Jun 20 11:22:52 2025"
+SHERPA_ONNX_API const char *SherpaOnnxGetGitDate();
+
 /// Please refer to
 /// https://k2-fsa.github.io/sherpa/onnx/pretrained_models/index.html
 /// to download pre-trained models. That is, you can find encoder-xxx.onnx
@@ -958,6 +982,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsKokoroModelConfig {
   float length_scale;  // < 1, faster in speech speed; > 1, slower in speed
   const char *dict_dir;
   const char *lexicon;
+  const char *lang;
 } SherpaOnnxOfflineTtsKokoroModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
