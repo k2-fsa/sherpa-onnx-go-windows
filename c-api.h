@@ -100,6 +100,10 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineZipformer2CtcModelConfig {
   const char *model;
 } SherpaOnnxOnlineZipformer2CtcModelConfig;
 
+SHERPA_ONNX_API typedef struct SherpaOnnxOnlineNemoCtcModelConfig {
+  const char *model;
+} SherpaOnnxOnlineNemoCtcModelConfig;
+
 SHERPA_ONNX_API typedef struct SherpaOnnxOnlineModelConfig {
   SherpaOnnxOnlineTransducerModelConfig transducer;
   SherpaOnnxOnlineParaformerModelConfig paraformer;
@@ -120,6 +124,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineModelConfig {
   const char *tokens_buf;
   /// byte size excluding the trailing '\0'
   int32_t tokens_buf_size;
+  SherpaOnnxOnlineNemoCtcModelConfig nemo_ctc;
 } SherpaOnnxOnlineModelConfig;
 
 /// It expects 16 kHz 16-bit single channel wave format.
@@ -1027,6 +1032,15 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsKokoroModelConfig {
   const char *lang;
 } SherpaOnnxOfflineTtsKokoroModelConfig;
 
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsKittenModelConfig {
+  const char *model;
+  const char *voices;
+  const char *tokens;
+  const char *data_dir;
+
+  float length_scale;  // < 1, faster in speech speed; > 1, slower in speed
+} SherpaOnnxOfflineTtsKittenModelConfig;
+
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
   SherpaOnnxOfflineTtsVitsModelConfig vits;
   int32_t num_threads;
@@ -1034,6 +1048,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsModelConfig {
   const char *provider;
   SherpaOnnxOfflineTtsMatchaModelConfig matcha;
   SherpaOnnxOfflineTtsKokoroModelConfig kokoro;
+  SherpaOnnxOfflineTtsKittenModelConfig kitten;
 } SherpaOnnxOfflineTtsModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineTtsConfig {
