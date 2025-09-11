@@ -104,6 +104,10 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineNemoCtcModelConfig {
   const char *model;
 } SherpaOnnxOnlineNemoCtcModelConfig;
 
+SHERPA_ONNX_API typedef struct SherpaOnnxOnlineToneCtcModelConfig {
+  const char *model;
+} SherpaOnnxOnlineToneCtcModelConfig;
+
 SHERPA_ONNX_API typedef struct SherpaOnnxOnlineModelConfig {
   SherpaOnnxOnlineTransducerModelConfig transducer;
   SherpaOnnxOnlineParaformerModelConfig paraformer;
@@ -125,6 +129,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOnlineModelConfig {
   /// byte size excluding the trailing '\0'
   int32_t tokens_buf_size;
   SherpaOnnxOnlineNemoCtcModelConfig nemo_ctc;
+  SherpaOnnxOnlineToneCtcModelConfig t_one_ctc;
 } SherpaOnnxOnlineModelConfig;
 
 /// It expects 16 kHz 16-bit single channel wave format.
@@ -471,6 +476,10 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineZipformerCtcModelConfig {
   const char *model;
 } SherpaOnnxOfflineZipformerCtcModelConfig;
 
+SHERPA_ONNX_API typedef struct SherpaOnnxOfflineWenetCtcModelConfig {
+  const char *model;
+} SherpaOnnxOfflineWenetCtcModelConfig;
+
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineModelConfig {
   SherpaOnnxOfflineTransducerModelConfig transducer;
   SherpaOnnxOfflineParaformerModelConfig paraformer;
@@ -496,6 +505,7 @@ SHERPA_ONNX_API typedef struct SherpaOnnxOfflineModelConfig {
   SherpaOnnxOfflineDolphinModelConfig dolphin;
   SherpaOnnxOfflineZipformerCtcModelConfig zipformer_ctc;
   SherpaOnnxOfflineCanaryModelConfig canary;
+  SherpaOnnxOfflineWenetCtcModelConfig wenet_ctc;
 } SherpaOnnxOfflineModelConfig;
 
 SHERPA_ONNX_API typedef struct SherpaOnnxOfflineRecognizerConfig {
