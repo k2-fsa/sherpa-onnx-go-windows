@@ -819,6 +819,164 @@ func (s *OfflineStream) GetResult() *OfflineRecognizerResult {
 	return result
 }
 
+
+
+// VAD
+
+// SileroVadModelConfig represents the configuration for the Silero VAD model.
+type SileroVadModelConfig struct {
+	Model              string  // Path to the Silero VAD model
+	Threshold          float32 // Threshold to classify a segment as speech
+	MinSilenceDuration float32 // Minimum silence duration in seconds
+	MinSpeechDuration  float32 // Minimum speech duration in seconds
+	WindowSize         int     // Window size for analysis
+}
+
+// VadModelConfig represents the configuration for the voice activity detection model.
+type VadModelConfig struct {
+	SileroVad         SileroVadModelConfig
+	SampleRate        int    // Sample rate of the input audio
+	NumThreads        int    // Number of threads to use for computation
+	Provider          string // Backend provider, e.g., "cpu"
+	Debug             int    // Enable debug mode
+	BufferSizeSeconds float32 // Buffer size in seconds for circular buffer
+}
+
+// CircularBuffer represents a circular buffer that can be used to store audio samples.
+type CircularBuffer struct {
+	impl *C.struct_SherpaOnnxCircularBuffer
+}
+
+// NewCircularBuffer creates a new circular buffer with the specified capacity.
+func NewCircularBuffer(capacity int) *CircularBuffer {
+	return &CircularBuffer{
+		impl: C.SherpaOnnxCreateCircularBuffer(C.int32_t(capacity)),
+	}
+}
+
+// Destroy frees the resources associated with the circular buffer.
+func (cb *CircularBuffer) Destroy() {
+	C.SherpaOnnxDestroyCircularBuffer(cb.impl)
+}
+
+// Push adds samples to the circular buffer.
+func (cb *CircularBuffer) Push(samples []float32) {
+	C.SherpaOnnxCircularBufferPush(cb.impl, (*C.float)(unsafe.Pointer(&samples[0])), C.int32_t(len(samples)))
+}
+
+// Get retrieves samples from the circular buffer starting at the specified index.
+func (cb *CircularBuffer) Get(startIndex, n int) []float32 {
+	cSamples := C.SherpaOnnxCircularBufferGet(cb.impl, C.int32_t(startIndex), C.int32_t(n))
+	defer C.SherpaOnnxCircularBufferFree(cSamples)
+	goSamples := (*[1 << 30]float32)(unsafe.Pointer(cSamples))[:n:n]
+	return goSamples
+}
+
+// Pop removes the specified number of elements from the circular buffer.
+func (cb *CircularBuffer) Pop(n int) {
+	C.SherpaOnnxCircularBufferPop(cb.impl, C.int32_t(n))
+}
+
+// Size returns the number of elements in the circular buffer.
+func (cb *CircularBuffer) Size() int {
+	return int(C.SherpaOnnxCircularBufferSize(cb.impl))
+}
+
+// Head returns the head index of the circular buffer.
+func (cb *CircularBuffer) Head() int {
+	return int(C.SherpaOnnxCircularBufferHead(cb.impl))
+}
+
+// Reset clears all elements in the circular buffer.
+func (cb *CircularBuffer) Reset() {
+	C.SherpaOnnxCircularBufferReset(cb.impl)
+}
+
+// VoiceActivityDetector represents a voice activity detector.
+type VoiceActivityDetector struct {
+	impl *C.struct_SherpaOnnxVoiceActivityDetector
+}
+
+// NewVoiceActivityDetector creates a new voice activity detector with the specified configuration.
+func NewVoiceActivityDetector(config *VadModelConfig) *VoiceActivityDetector {
+	cConfig := C.struct_SherpaOnnxVadModelConfig{
+		sample_rate: C.int32_t(config.SampleRate),
+		num_threads: C.int32_t(config.NumThreads),
+		provider:    C.CString(config.Provider),
+		debug:       C.int32_t(config.Debug),
+		silero_vad: C.struct_SherpaOnnxSileroVadModelConfig{
+			model:               C.CString(config.SileroVad.Model),
+			threshold:           C.float(config.SileroVad.Threshold),
+			min_silence_duration: C.float(config.SileroVad.MinSilenceDuration),
+			min_speech_duration:  C.float(config.SileroVad.MinSpeechDuration),
+			window_size:          C.int(config.SileroVad.WindowSize),
+		},
+	}
+	defer C.free(unsafe.Pointer(cConfig.provider))
+	defer C.free(unsafe.Pointer(cConfig.silero_vad.model))
+
+	return &VoiceActivityDetector{
+		impl: C.SherpaOnnxCreateVoiceActivityDetector(&cConfig, C.float(config.BufferSizeSeconds)),
+	}
+}
+
+// Destroy frees the resources associated with the voice activity detector.
+func (vad *VoiceActivityDetector) Destroy() {
+	C.SherpaOnnxDestroyVoiceActivityDetector(vad.impl)
+}
+
+// AcceptWaveform processes the provided samples for voice activity detection.
+func (vad *VoiceActivityDetector) AcceptWaveform(samples []float32) {
+	C.SherpaOnnxVoiceActivityDetectorAcceptWaveform(vad.impl, (*C.float)(unsafe.Pointer(&samples[0])), C.int32_t(len(samples)))
+}
+
+// IsEmpty checks if there are no speech segments available.
+func (vad *VoiceActivityDetector) IsEmpty() bool {
+	return C.SherpaOnnxVoiceActivityDetectorEmpty(vad.impl) == 1
+}
+
+// Detected checks if voice has been detected.
+func (vad *VoiceActivityDetector) Detected() bool {
+	return C.SherpaOnnxVoiceActivityDetectorDetected(vad.impl) == 1
+}
+
+// Pop removes the first speech segment from the detector.
+func (vad *VoiceActivityDetector) Pop() {
+	C.SherpaOnnxVoiceActivityDetectorPop(vad.impl)
+}
+
+// Clear clears current speech segments.
+func (vad *VoiceActivityDetector) Clear() {
+	C.SherpaOnnxVoiceActivityDetectorClear(vad.impl)
+}
+
+// Front returns the first speech segment.
+func (vad *VoiceActivityDetector) Front() *SpeechSegment {
+	cSegment := C.SherpaOnnxVoiceActivityDetectorFront(vad.impl)
+	defer C.SherpaOnnxDestroySpeechSegment(cSegment)
+
+	segment := &SpeechSegment{
+		Start:   int(cSegment.start),
+		Samples: (*[1 << 30]float32)(unsafe.Pointer(cSegment.samples))[:cSegment.n:cSegment.n],
+		N:       int(cSegment.n),
+	}
+	return segment
+}
+
+// Reset re-initializes the voice activity detector.
+func (vad *VoiceActivityDetector) Reset() {
+	C.SherpaOnnxVoiceActivityDetectorReset(vad.impl)
+}
+
+// SpeechSegment represents a segment of speech detected by the voice activity detector.
+type SpeechSegment struct {
+	Start   int       // The start index in samples of this segment
+	Samples []float32 // Pointer to the array containing the samples
+	N       int       // Number of samples in this segment
+}
+
+
+
 // Configuration for offline/non-streaming text-to-speech (TTS).
 //
 // Please refer to
