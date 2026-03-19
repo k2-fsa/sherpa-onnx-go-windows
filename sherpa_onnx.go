@@ -317,6 +317,33 @@ func (s *OnlineStream) InputFinished() {
 	C.SherpaOnnxOnlineStreamInputFinished(s.impl)
 }
 
+// Set a key-value option on the online stream.
+// This provides a generic mechanism for passing per-stream runtime parameters
+// to the recognizer (e.g., "is_final" for streaming Paraformer).
+func (s *OnlineStream) SetOption(key string, value string) {
+	cKey := C.CString(key)
+	defer C.free(unsafe.Pointer(cKey))
+	cValue := C.CString(value)
+	defer C.free(unsafe.Pointer(cValue))
+	C.SherpaOnnxOnlineStreamSetOption(s.impl, cKey, cValue)
+}
+
+// Get a key-value option from the online stream.
+// Returns an empty string if the option is not set.
+func (s *OnlineStream) GetOption(key string) string {
+	cKey := C.CString(key)
+	defer C.free(unsafe.Pointer(cKey))
+	return C.GoString(C.SherpaOnnxOnlineStreamGetOption(s.impl, cKey))
+}
+
+// Check whether the given option exists in the online stream.
+// Return true if the option exists. Return false otherwise.
+func (s *OnlineStream) HasOption(key string) bool {
+	cKey := C.CString(key)
+	defer C.free(unsafe.Pointer(cKey))
+	return C.SherpaOnnxOnlineStreamHasOption(s.impl, cKey) == 1
+}
+
 // Check whether the stream has enough feature frames for decoding.
 // Return true if this stream is ready for decoding. Return false otherwise.
 //
@@ -797,6 +824,33 @@ func (s *OfflineStream) AcceptWaveform(sampleRate int, samples []float32) {
 	C.SherpaOnnxAcceptWaveformOffline(s.impl, C.int(sampleRate), (*C.float)(&samples[0]), C.int(len(samples)))
 }
 
+// Set a key-value option on the offline stream.
+// This provides a generic mechanism for passing per-stream runtime parameters
+// to the recognizer (e.g., "task", "prompt").
+func (s *OfflineStream) SetOption(key string, value string) {
+	cKey := C.CString(key)
+	defer C.free(unsafe.Pointer(cKey))
+	cValue := C.CString(value)
+	defer C.free(unsafe.Pointer(cValue))
+	C.SherpaOnnxOfflineStreamSetOption(s.impl, cKey, cValue)
+}
+
+// Get a key-value option from the offline stream.
+// Returns an empty string if the option is not set.
+func (s *OfflineStream) GetOption(key string) string {
+	cKey := C.CString(key)
+	defer C.free(unsafe.Pointer(cKey))
+	return C.GoString(C.SherpaOnnxOfflineStreamGetOption(s.impl, cKey))
+}
+
+// Check whether the given option exists in the offline stream.
+// Return true if the option exists. Return false otherwise.
+func (s *OfflineStream) HasOption(key string) bool {
+	cKey := C.CString(key)
+	defer C.free(unsafe.Pointer(cKey))
+	return C.SherpaOnnxOfflineStreamHasOption(s.impl, cKey) == 1
+}
+
 // Decode the offline stream.
 func (recognizer *OfflineRecognizer) Decode(s *OfflineStream) {
 	C.SherpaOnnxDecodeOfflineStream(recognizer.impl, s.impl)
@@ -1273,6 +1327,7 @@ func (tts *OfflineTts) Generate(text string, sid int, speed float32) *GeneratedA
 	return ans
 }
 
+// Deprecated: Use GenerateWithConfig() instead.
 func (tts *OfflineTts) GenerateWithZipvoice(
 	text, promptText string,
 	promptSamples []float32,
@@ -2134,8 +2189,8 @@ func (sd *OfflineSpeakerDiarization) Process(samples []float32) []OfflineSpeaker
 // ============================================================
 type OfflinePunctuationModelConfig struct {
 	CtTransformer string
-	NumThreads    C.int
-	Debug         C.int // true to print debug information of the model
+	NumThreads    int
+	Debug         int // true to print debug information of the model
 	Provider      string
 }
 
@@ -2152,8 +2207,8 @@ func NewOfflinePunctuation(config *OfflinePunctuationConfig) *OfflinePunctuation
 	cfg.model.ct_transformer = C.CString(config.Model.CtTransformer)
 	defer C.free(unsafe.Pointer(cfg.model.ct_transformer))
 
-	cfg.model.num_threads = config.Model.NumThreads
-	cfg.model.debug = config.Model.Debug
+	cfg.model.num_threads = C.int(config.Model.NumThreads)
+	cfg.model.debug = C.int(config.Model.Debug)
 	cfg.model.provider = C.CString(config.Model.Provider)
 	defer C.free(unsafe.Pointer(cfg.model.provider))
 
@@ -2172,12 +2227,75 @@ func DeleteOfflinePunc(punc *OfflinePunctuation) {
 }
 
 func (punc *OfflinePunctuation) AddPunct(text string) string {
-	p := C.SherpaOfflinePunctuationAddPunct(punc.impl, C.CString(text))
+	inputText := C.CString(text)
+	defer C.free(unsafe.Pointer(inputText))
+	p := C.SherpaOfflinePunctuationAddPunct(punc.impl, inputText)
+	if p == nil {
+		return ""
+	}
 	defer C.SherpaOfflinePunctuationFreeText(p)
 
 	text_with_punct := C.GoString(p)
 
 	return text_with_punct
+}
+
+type OnlinePunctuationModelConfig struct {
+	CnnBilstm  string
+	BpeVocab   string
+	NumThreads int
+	Debug      int
+	Provider   string
+}
+
+type OnlinePunctuationConfig struct {
+	Model OnlinePunctuationModelConfig
+}
+
+type OnlinePunctuation struct {
+	impl *C.struct_SherpaOnnxOnlinePunctuation
+}
+
+func NewOnlinePunctuation(config *OnlinePunctuationConfig) *OnlinePunctuation {
+	cfg := C.struct_SherpaOnnxOnlinePunctuationConfig{}
+	cfg.model.cnn_bilstm = C.CString(config.Model.CnnBilstm)
+	defer C.free(unsafe.Pointer(cfg.model.cnn_bilstm))
+
+	cfg.model.bpe_vocab = C.CString(config.Model.BpeVocab)
+	defer C.free(unsafe.Pointer(cfg.model.bpe_vocab))
+
+	cfg.model.num_threads = C.int(config.Model.NumThreads)
+	cfg.model.debug = C.int(config.Model.Debug)
+	cfg.model.provider = C.CString(config.Model.Provider)
+	defer C.free(unsafe.Pointer(cfg.model.provider))
+
+	impl := C.SherpaOnnxCreateOnlinePunctuation(&cfg)
+	if impl == nil {
+		return nil
+	}
+	punc := &OnlinePunctuation{}
+	punc.impl = impl
+	return punc
+}
+
+func DeleteOnlinePunctuation(punc *OnlinePunctuation) {
+	C.SherpaOnnxDestroyOnlinePunctuation(punc.impl)
+	punc.impl = nil
+}
+
+func (punc *OnlinePunctuation) AddPunct(text string) string {
+	inputText := C.CString(text)
+	defer C.free(unsafe.Pointer(inputText))
+
+	p := C.SherpaOnnxOnlinePunctuationAddPunct(punc.impl, inputText)
+	if p == nil {
+		return ""
+	}
+	defer C.SherpaOnnxOnlinePunctuationFreeText(p)
+
+	textWithPunct := C.GoString(p)
+
+	return textWithPunct
 }
 
 // Configuration for the online/streaming recognizer.
@@ -2438,8 +2556,13 @@ type OfflineSpeechDenoiserGtcrnModelConfig struct {
 	Model string
 }
 
+type OfflineSpeechDenoiserDpdfNetModelConfig struct {
+	Model string
+}
+
 type OfflineSpeechDenoiserModelConfig struct {
 	Gtcrn      OfflineSpeechDenoiserGtcrnModelConfig
+	DpdfNet    OfflineSpeechDenoiserDpdfNetModelConfig
 	NumThreads int32
 	Debug      int32
 	Provider   string
@@ -2453,11 +2576,51 @@ type OfflineSpeechDenoiser struct {
 	impl *C.struct_SherpaOnnxOfflineSpeechDenoiser
 }
 
+type OnlineSpeechDenoiserConfig struct {
+	Model OfflineSpeechDenoiserModelConfig
+}
+
+type OnlineSpeechDenoiser struct {
+	impl *C.struct_SherpaOnnxOnlineSpeechDenoiser
+}
+
 type DenoisedAudio struct {
 	// Normalized samples in the range [-1, 1]
 	Samples []float32
 
 	SampleRate int
+}
+
+func floatPointer(samples []float32) *C.float {
+	if len(samples) == 0 {
+		return nil
+	}
+
+	return (*C.float)(&samples[0])
+}
+
+func denoisedAudioFromPointer(audio *C.struct_SherpaOnnxDenoisedAudio) *DenoisedAudio {
+	if audio == nil {
+		return &DenoisedAudio{}
+	}
+
+	defer C.SherpaOnnxDestroyDenoisedAudio(audio)
+
+	ans := &DenoisedAudio{}
+	ans.SampleRate = int(audio.sample_rate)
+	n := int(audio.n)
+	ans.Samples = make([]float32, n)
+
+	if n == 0 || audio.samples == nil {
+		return ans
+	}
+
+	denoisedSamples := unsafe.Slice(audio.samples, n)
+	for i := 0; i < n; i++ {
+		ans.Samples[i] = float32(denoisedSamples[i])
+	}
+
+	return ans
 }
 
 // Free the internal pointer inside the OfflineSpeechDenoiser to avoid memory leak.
@@ -2472,6 +2635,8 @@ func NewOfflineSpeechDenoiser(config *OfflineSpeechDenoiserConfig) *OfflineSpeec
 	c := C.struct_SherpaOnnxOfflineSpeechDenoiserConfig{}
 	c.model.gtcrn.model = C.CString(config.Model.Gtcrn.Model)
 	defer C.free(unsafe.Pointer(c.model.gtcrn.model))
+	c.model.dpdfnet.model = C.CString(config.Model.DpdfNet.Model)
+	defer C.free(unsafe.Pointer(c.model.dpdfnet.model))
 
 	c.model.num_threads = C.int(config.Model.NumThreads)
 	c.model.debug = C.int(config.Model.Debug)
@@ -2490,33 +2655,74 @@ func NewOfflineSpeechDenoiser(config *OfflineSpeechDenoiserConfig) *OfflineSpeec
 }
 
 func (sd *OfflineSpeechDenoiser) Run(samples []float32, sampleRate int) *DenoisedAudio {
-	audio := C.SherpaOnnxOfflineSpeechDenoiserRun(sd.impl, (*C.float)(&samples[0]), C.int(len(samples)), C.int(sampleRate))
-	defer C.SherpaOnnxDestroyDenoisedAudio(audio)
-
-	ans := &DenoisedAudio{}
-	ans.SampleRate = int(audio.sample_rate)
-	n := int(audio.n)
-	ans.Samples = make([]float32, n)
-
-	denoisedSamples := unsafe.Slice(audio.samples, n)
-	for i := 0; i < n; i++ {
-		ans.Samples[i] = float32(denoisedSamples[i])
-	}
-
-	return ans
+	audio := C.SherpaOnnxOfflineSpeechDenoiserRun(sd.impl, floatPointer(samples), C.int(len(samples)), C.int(sampleRate))
+	return denoisedAudioFromPointer(audio)
 }
 
 func (audio *DenoisedAudio) Save(filename string) bool {
 	s := C.CString(filename)
 	defer C.free(unsafe.Pointer(s))
 
-	ok := int(C.SherpaOnnxWriteWave((*C.float)(&audio.Samples[0]), C.int(len(audio.Samples)), C.int(audio.SampleRate), s))
+	ok := int(C.SherpaOnnxWriteWave(floatPointer(audio.Samples), C.int(len(audio.Samples)), C.int(audio.SampleRate), s))
 
 	return ok == 1
 }
 
 func (sd *OfflineSpeechDenoiser) SampleRate() int {
 	return int(C.SherpaOnnxOfflineSpeechDenoiserGetSampleRate(sd.impl))
+}
+
+// Free the internal pointer inside the OnlineSpeechDenoiser to avoid memory leak.
+func DeleteOnlineSpeechDenoiser(sd *OnlineSpeechDenoiser) {
+	C.SherpaOnnxDestroyOnlineSpeechDenoiser(sd.impl)
+	sd.impl = nil
+}
+
+// The user is responsible to invoke [DeleteOnlineSpeechDenoiser]() to free
+// the returned denoiser to avoid memory leak.
+func NewOnlineSpeechDenoiser(config *OnlineSpeechDenoiserConfig) *OnlineSpeechDenoiser {
+	c := C.struct_SherpaOnnxOnlineSpeechDenoiserConfig{}
+	c.model.gtcrn.model = C.CString(config.Model.Gtcrn.Model)
+	defer C.free(unsafe.Pointer(c.model.gtcrn.model))
+	c.model.dpdfnet.model = C.CString(config.Model.DpdfNet.Model)
+	defer C.free(unsafe.Pointer(c.model.dpdfnet.model))
+
+	c.model.num_threads = C.int(config.Model.NumThreads)
+	c.model.debug = C.int(config.Model.Debug)
+
+	c.model.provider = C.CString(config.Model.Provider)
+	defer C.free(unsafe.Pointer(c.model.provider))
+
+	impl := C.SherpaOnnxCreateOnlineSpeechDenoiser(&c)
+	if impl == nil {
+		return nil
+	}
+
+	sd := &OnlineSpeechDenoiser{}
+	sd.impl = impl
+	return sd
+}
+
+func (sd *OnlineSpeechDenoiser) Run(samples []float32, sampleRate int) *DenoisedAudio {
+	audio := C.SherpaOnnxOnlineSpeechDenoiserRun(sd.impl, floatPointer(samples), C.int(len(samples)), C.int(sampleRate))
+	return denoisedAudioFromPointer(audio)
+}
+
+func (sd *OnlineSpeechDenoiser) Flush() *DenoisedAudio {
+	audio := C.SherpaOnnxOnlineSpeechDenoiserFlush(sd.impl)
+	return denoisedAudioFromPointer(audio)
+}
+
+func (sd *OnlineSpeechDenoiser) Reset() {
+	C.SherpaOnnxOnlineSpeechDenoiserReset(sd.impl)
+}
+
+func (sd *OnlineSpeechDenoiser) SampleRate() int {
+	return int(C.SherpaOnnxOnlineSpeechDenoiserGetSampleRate(sd.impl))
+}
+
+func (sd *OnlineSpeechDenoiser) FrameShiftInSamples() int {
+	return int(C.SherpaOnnxOnlineSpeechDenoiserGetFrameShiftInSamples(sd.impl))
 }
 
 func GetVersion() string {
