@@ -2009,7 +2009,7 @@ SHERPA_ONNX_API void SherpaOnnxCircularBufferPush(
  *
  * @param buffer A pointer returned by SherpaOnnxCreateCircularBuffer().
  * @param start_index Absolute start index in the buffer timeline.
- * @param n Number of samples to copy.
+ * @param n Number of samples to copy. Must be greater than zero.
  * @return A newly allocated array containing @p n samples. Free it with
  *         SherpaOnnxCircularBufferFree().
  *
@@ -2021,8 +2021,15 @@ SHERPA_ONNX_API void SherpaOnnxCircularBufferPush(
 SHERPA_ONNX_API const float *SherpaOnnxCircularBufferGet(
     const SherpaOnnxCircularBuffer *buffer, int32_t start_index, int32_t n);
 
-/** @brief Free an array returned by SherpaOnnxCircularBufferGet(). */
+/** @brief Free an array returned by SherpaOnnxCircularBufferGet().
+ *  @param p Must be a non-NULL pointer obtained from
+ *           SherpaOnnxCircularBufferGet(). */
+#if defined(__GNUC__) || defined(__clang__)
+SHERPA_ONNX_API void SherpaOnnxCircularBufferFree(const float *p)
+    __attribute__((nonnull(1)));
+#else
 SHERPA_ONNX_API void SherpaOnnxCircularBufferFree(const float *p);
+#endif
 
 /**
  * @brief Drop samples from the front of a circular buffer.
