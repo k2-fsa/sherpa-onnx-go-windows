@@ -151,6 +151,16 @@ SHERPA_ONNX_API const char *SherpaOnnxGetGitSha1();
 SHERPA_ONNX_API const char *SherpaOnnxGetGitDate();
 
 /**
+ * @brief Return the onnxruntime version string used by the library.
+ *
+ * The returned pointer refers to statically allocated memory owned by the
+ * library. Do not free it and do not modify it.
+ *
+ * @return Onnxruntime version string, for example `"1.22.0"`.
+ */
+SHERPA_ONNX_API const char *SherpaOnnxGetOnnxruntimeVersionStr();
+
+/**
  * @brief Check whether a file exists.
  *
  * @param filename File path to test.
@@ -4088,6 +4098,15 @@ typedef struct SherpaOnnxOfflineSpeechDenoiserGtcrnModelConfig {
 typedef struct SherpaOnnxOfflineSpeechDenoiserDpdfNetModelConfig {
   /** Model filename. */
   const char *model;
+  /**
+   * Offline attenuation limit in dB.
+   *
+   * Values greater than 0 limit suppression by blending aligned noisy spectra
+   * into the enhanced spectra with a noisy-signal weight of
+   * `10^(-limit_db / 20)`. The maximum finite value is 100. Set to 0 or
+   * infinity to disable the limit.
+   */
+  float attenuation_limit_db;
 } SherpaOnnxOfflineSpeechDenoiserDpdfNetModelConfig;
 
 /**

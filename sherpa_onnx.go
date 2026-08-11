@@ -2570,7 +2570,8 @@ type OfflineSpeechDenoiserGtcrnModelConfig struct {
 }
 
 type OfflineSpeechDenoiserDpdfNetModelConfig struct {
-	Model string
+	Model              string
+	AttenuationLimitDb float32
 }
 
 type OfflineSpeechDenoiserModelConfig struct {
@@ -2650,6 +2651,7 @@ func NewOfflineSpeechDenoiser(config *OfflineSpeechDenoiserConfig) *OfflineSpeec
 	defer C.free(unsafe.Pointer(c.model.gtcrn.model))
 	c.model.dpdfnet.model = C.CString(config.Model.DpdfNet.Model)
 	defer C.free(unsafe.Pointer(c.model.dpdfnet.model))
+	c.model.dpdfnet.attenuation_limit_db = C.float(config.Model.DpdfNet.AttenuationLimitDb)
 
 	c.model.num_threads = C.int(config.Model.NumThreads)
 	c.model.debug = C.int(config.Model.Debug)
@@ -2748,6 +2750,11 @@ func GetGitSha1() string {
 
 func GetGitDate() string {
 	return C.GoString(C.SherpaOnnxGetGitDate())
+}
+
+// GetOnnxruntimeVersion returns the onnxruntime version string used by the library.
+func GetOnnxruntimeVersion() string {
+	return C.GoString(C.SherpaOnnxGetOnnxruntimeVersionStr())
 }
 
 type OfflineSourceSeparationSpleeterModelConfig struct {
